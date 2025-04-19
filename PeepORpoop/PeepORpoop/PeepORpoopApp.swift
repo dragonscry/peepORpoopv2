@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct PeepORpoopApp: App {
+    @State private var locationManager = LocationManager()
     var body: some Scene {
         WindowGroup {
+            
             ContentView()
         }
+        .environment(locationManager)
     }
+    
 }

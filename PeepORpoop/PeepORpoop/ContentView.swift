@@ -7,61 +7,69 @@
 
 import MapKit
 import SwiftUI
+import CoreLocation
 
 struct ContentView: View {
     
-    @StateObject private var viewModel = ContentViewModel()
+    @Environment(LocationManager.self) var locationManager
+    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     
     var body: some View {
-        Map(initialPosition: viewModel.cameraPosition){
+        Map(position: $cameraPosition){
             UserAnnotation()
-        }
-        .onAppear {
-            viewModel.checkUfLicationServiceIsEnabled()
         }
     }
 }
 
 #Preview {
     ContentView()
+        .environment(LocationManager())
 }
 
 
-final class ContentViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
+@Observable
+class LocationManager: NSObject, CLLocationManagerDelegate {
+    @ObservationIgnored let manager = CLLocationManager()
+    var userLocation: CLLocation?
+    var isAuthorized = false
     
-    @Published var cameraPosition: MapCameraPosition = .region(.init(center: .init(latitude: 37.3346, longitude: -122.0090),latitudinalMeters: 1300, longitudinalMeters: 1300))
-    
-    var locationManager = CLLocationManager()
-    
-    func checkUfLicationServiceIsEnabled() {
-        guard CLLocationManager.locationServicesEnabled() else {
-                print("Location services are disabled. Show alert to user.")
-                return
-            }
-
-            // Initialize the location manager safely
-            locationManager = CLLocationManager()
-            locationManager.delegate = self
-            locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    override init() {
+        super.init()
+        manager.delegate = self
+        startLocationServices()
     }
     
-    private func checkLocationAuthorization() {
-        switch locationManager.authorizationStatus {
-            
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
-        case .restricted:
-            print("Your location is restricted due to parental controls.")
-        case .denied:
-            print("You have denied this app location permission")
-        case .authorizedAlways, .authorizedWhenInUse:
-            cameraPosition = .region(MKCoordinateRegion(center: locationManager.location!.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.05)))
-        @unknown default:
-            break
+    func startLocationServices() {
+        if manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse {
+            manager.startUpdatingLocation()
+            isAuthorized = true } else {
+                isAuthorized = false
+                manager.requestWhenInUseAuthorization()
         }
     }
     
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        checkLocationAuthorization()
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        userLocation = locations.last
+    }
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            isAuthorized = true
+            manager.requestLocation()
+        case .notDetermined:
+            isAuthorized = false
+            manager.requestWhenInUseAuthorization()
+        case .denied:
+            isAuthorized = false
+            print("access denied")
+        default:
+            isAuthorized = true
+            startLocationServices()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
+        print(error.localizedDescription)
     }
 }
